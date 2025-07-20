@@ -1,0 +1,74 @@
+name: CI/CD Pipeline with SonarCloud and Snyk
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for SonarCloud to analyze Git history
+
+      # Set up Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Run tests
+      - name: Run tests
+        run: npm test
+
+      # SonarCloud scan
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=my-nodejs-app
+            -Dsonar.organization=my-org
+            -Dsonar.sources=.
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.qualitygate.wait=true
+
+      # Snyk scan
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+      - name: Run Snyk to check for vulnerabilities
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          npm install -g snyk-to-html
+          snyk test --severity-threshold=high --json > snyk-report.json
+          snyk-to-html -i snyk-report.json -o snyk-report.html
+      - name: Upload Snyk report
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: snyk-report.html
+
+      # Build and push Docker image
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/my-nodejs-app:${{ github.sha }} .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-nodejs-app:${{ github.sha }}
