@@ -2,9 +2,9 @@ name: CI/CD Pipeline with SonarCloud and Snyk
 
 on:
   push:
-    branches: [ main ]
+    branches: [ try ]
   pull_request:
-    branches: [ main ]
+    branches: [ try ]
 
 jobs:
   build-and-security-scan:
